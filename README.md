@@ -25,11 +25,17 @@ pip install requests beautifulsoup4 argparse
 
 ## Usage
 
-To run the tool, use the following command:
+To run the tool, follow these steps:
 
-```bash
-python emailharvester.py --domain <domain_suffix> --max_results <number_of_results> --output_folder <folder_name>
-```
+1. **Make the script executable**:
+   ```bash
+   chmod +x emailharvester.py
+   ```
+
+2. **Run the script**:
+   ```bash
+   ./emailharvester.py --domain <domain_suffix> --max_results <number_of_results> --output_folder <folder_name>
+   ```
 
 ### Arguments
 
@@ -40,7 +46,7 @@ python emailharvester.py --domain <domain_suffix> --max_results <number_of_resul
 ### Example
 
 ```bash
-python emailharvester.py -d example.com -m 50 -o my_downloads
+./emailharvester.py -d example.com -m 50 -o my_downloads
 ```
 
 ## TODO: Enhancements and Best Practices
@@ -91,4 +97,3 @@ This tool is intended for educational purposes only. The author is not responsib
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
 ---
-
