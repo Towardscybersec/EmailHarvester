@@ -28,7 +28,7 @@ pip install requests beautifulsoup4 argparse
 To run the tool, use the following command:
 
 ```bash
-python google_dork_email_extractor.py --domain <domain_suffix> --max_results <number_of_results> --output_folder <folder_name>
+python emailharvester.py --domain <domain_suffix> --max_results <number_of_results> --output_folder <folder_name>
 ```
 
 ### Arguments
@@ -40,7 +40,7 @@ python google_dork_email_extractor.py --domain <domain_suffix> --max_results <nu
 ### Example
 
 ```bash
-python google_dork_email_extractor.py -d example.com -m 50 -o my_downloads
+python emailharvester.py -d example.com -m 50 -o my_downloads
 ```
 
 ## TODO: Enhancements and Best Practices
