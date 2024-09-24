@@ -3,9 +3,19 @@
 import os
 import re
 import requests
+import urllib3
+import certifi
 from bs4 import BeautifulSoup
 import time
 import argparse
+from urllib3.util.ssl_ import create_urllib3_context
+from cryptography import x509
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
+import ssl
+
+# Disable warnings for unverified HTTPS requests (optional, not recommended for production)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Function to perform a Google search and return the HTML content of the search results
 def google_search(query, start=0):
@@ -13,7 +23,9 @@ def google_search(query, start=0):
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     }
     url = f"https://www.google.com/search?q={query}&start={start}"
-    response = requests.get(url, headers=headers, verify=False)
+    
+    # SSL verification using certifi's CA bundle
+    response = requests.get(url, headers=headers, verify=certifi.where())
     if response.status_code == 200:
         return response.text
     else:
@@ -46,8 +58,8 @@ def download_pages(query, max_results=10, output_folder='downloaded_pages'):
             if url.startswith('http') and url not in visited_urls:
                 visited_urls.add(url)
                 try:
-                    # Bypassing SSL certificate verification
-                    response = requests.get(url, verify=False)
+                    # SSL verification using certifi's CA bundle
+                    response = requests.get(url, verify=certifi.where())
                     if response.status_code == 200:
                         file_name = f"page_{len(downloaded_files) + 1}.html"
                         file_path = os.path.join(output_folder, file_name)
@@ -81,8 +93,8 @@ def extract_and_download_links(html_content, visited_urls, output_folder):
         if url.startswith('http') and url not in visited_urls:
             visited_urls.add(url)
             try:
-                # Bypassing SSL certificate verification
-                response = requests.get(url, verify=False)
+                # SSL verification using certifi's CA bundle
+                response = requests.get(url, verify=certifi.where())
                 if response.status_code == 200:
                     file_name = f"page_{len(visited_urls)}.html"
                     file_path = os.path.join(output_folder, file_name)
@@ -94,7 +106,7 @@ def extract_and_download_links(html_content, visited_urls, output_folder):
             except Exception as e:
                 print(f"Error downloading {url}: {e}")
 
-# Function to parse downloaded pages and extract emails
+# Function to extract emails from downloaded pages
 def extract_emails_from_pages(files, domain_suffix):
     emails = set()
     email_pattern = re.compile(rf'\b[A-Za-z0-9._%+-]+@{domain_suffix}\b')
@@ -108,6 +120,69 @@ def extract_emails_from_pages(files, domain_suffix):
 
     return emails
 
+# Function to verify SSL certificate and check against the pinned fingerprint
+def verify_pinned_certificate(cert_der_bytes, pinned_fingerprint):
+    # Parse the certificate
+    cert = x509.load_der_x509_certificate(cert_der_bytes, default_backend())
+    
+    # Extract the public key bytes
+    public_key_bytes = cert.public_key().public_bytes(
+        encoding=ssl.Encoding.DER,
+        format=ssl.PublicFormat.SubjectPublicKeyInfo
+    )
+
+    # Calculate the hash (fingerprint) of the public key
+    cert_fingerprint = hashes.Hash(hashes.SHA256(), backend=default_backend())
+    cert_fingerprint.update(public_key_bytes)
+    cert_fingerprint_hex = cert_fingerprint.finalize().hex()
+
+    # Compare the fingerprint with your pinned fingerprint
+    if cert_fingerprint_hex != pinned_fingerprint:
+        raise ssl.SSLError("Certificate pinning validation failed!")
+    print("Certificate pinning validation successful.")
+
+# Create a custom HTTPSConnection that performs pinning
+class PinnedHTTPSConnection(urllib3.connection.HTTPSConnection):
+    def connect(self):
+        # Establish connection using normal SSL handshake
+        super().connect()
+
+        # Extract the peer certificate
+        peer_cert = self.sock.getpeercert(binary_form=True)
+        
+        # Verify the certificate using the pinned fingerprint
+        verify_pinned_certificate(peer_cert, CERTIFICATE_FINGERPRINT)
+
+# Create a custom PoolManager that uses the PinnedHTTPSConnection
+class PinnedHTTPAdapter(urllib3.PoolManager):
+    def __init__(self, *args, **kwargs):
+        kwargs['ssl_version'] = ssl.PROTOCOL_TLSv1_2  # Ensure latest SSL/TLS
+        super().__init__(*args, **kwargs)
+        # Override the connection_cls to use the PinnedHTTPSConnection
+        self.connection_cls = PinnedHTTPSConnection
+
+# Function to extract server certificate and generate its fingerprint
+def get_certificate_fingerprint(domain):
+    conn = urllib3.connection_from_url(f'https://{domain}')
+    conn.connect()
+
+    # Extract the certificate
+    cert = conn.sock.getpeercert(binary_form=True)
+
+    # Parse and calculate the fingerprint of the certificate
+    public_key = x509.load_der_x509_certificate(cert, default_backend()).public_key()
+    public_key_bytes = public_key.public_bytes(
+        encoding=ssl.Encoding.DER,
+        format=ssl.PublicFormat.SubjectPublicKeyInfo
+    )
+
+    sha256_hash = hashes.Hash(hashes.SHA256(), backend=default_backend())
+    sha256_hash.update(public_key_bytes)
+    fingerprint = sha256_hash.finalize().hex()
+
+    print(f"Extracted Certificate Fingerprint: {fingerprint}")
+    return fingerprint
+
 # Main function to orchestrate the process
 def main():
     parser = argparse.ArgumentParser(description="Google Dork Email Extractor Tool")
@@ -116,6 +191,9 @@ def main():
     parser.add_argument('-o', '--output_folder', type=str, default='downloaded_pages', help='Folder to save downloaded pages (default: downloaded_pages)')
 
     args = parser.parse_args()
+
+    global CERTIFICATE_FINGERPRINT
+    CERTIFICATE_FINGERPRINT = get_certificate_fingerprint(args.domain)
 
     dork = f'site:{args.domain} intext:"@{args.domain}"'
     print(f"Using dork: {dork}")
