@@ -8,6 +8,8 @@ import certifi
 from bs4 import BeautifulSoup
 import time
 import argparse
+import random
+import logging
 from urllib3.util.ssl_ import create_urllib3_context
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
@@ -17,20 +19,59 @@ import ssl
 # Disable warnings for unverified HTTPS requests (optional, not recommended for production)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# Sample list of User-Agent strings for rotation
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Safari/605.1.15",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/117.0",
+]
+
+# Loaded proxy list (populated if --proxy_file is supplied)
+PROXIES = []
+
+# Configure logging
+logging.basicConfig(
+    filename="emailharvester.log",
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
+
+
+def get_random_headers():
+    """Return headers with a random User-Agent."""
+    return {"User-Agent": random.choice(USER_AGENTS)}
+
+
+def get_random_proxy():
+    """Return a random proxy mapping if proxies are configured."""
+    if not PROXIES:
+        return None
+    proxy = random.choice(PROXIES)
+    return {"http": proxy, "https": proxy}
+
 # Function to perform a Google search and return the HTML content of the search results
 def google_search(query, start=0):
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-    }
+    """Perform a Google search and return the HTML content."""
+    headers = get_random_headers()
     url = f"https://www.google.com/search?q={query}&start={start}"
-    
-    # SSL verification using certifi's CA bundle
-    response = requests.get(url, headers=headers, verify=certifi.where())
-    if response.status_code == 200:
-        return response.text
-    else:
-        print(f"Failed to retrieve Google search results (Status Code: {response.status_code})")
-        return None
+
+    try:
+        response = requests.get(
+            url,
+            headers=headers,
+            verify=certifi.where(),
+            proxies=get_random_proxy(),
+            timeout=10,
+        )
+        if response.status_code == 200:
+            return response.text
+        logging.warning(
+            "Failed to retrieve Google results %s (Status Code: %s)", url, response.status_code
+        )
+    except requests.RequestException as e:
+        logging.error("Google search error for %s: %s", url, e)
+    return None
 
 # Function to download and save pages based on URLs found
 def download_pages(query, max_results=10, output_folder='downloaded_pages'):
@@ -58,28 +99,34 @@ def download_pages(query, max_results=10, output_folder='downloaded_pages'):
             if url.startswith('http') and url not in visited_urls:
                 visited_urls.add(url)
                 try:
-                    # SSL verification using certifi's CA bundle
-                    response = requests.get(url, verify=certifi.where())
+                    response = requests.get(
+                        url,
+                        headers=get_random_headers(),
+                        verify=certifi.where(),
+                        proxies=get_random_proxy(),
+                        timeout=10,
+                    )
                     if response.status_code == 200:
                         file_name = f"page_{len(downloaded_files) + 1}.html"
                         file_path = os.path.join(output_folder, file_name)
                         with open(file_path, 'w', encoding='utf-8') as f:
                             f.write(response.text)
                         downloaded_files.append(file_path)
-                        print(f"Downloaded: {url}")
-                        # Extract links and download them
+                        logging.info("Downloaded: %s", url)
                         extract_and_download_links(response.text, visited_urls, output_folder)
                     else:
-                        print(f"Failed to download {url} (Status Code: {response.status_code})")
-                except Exception as e:
-                    print(f"Error downloading {url}: {e}")
+                        logging.warning("Failed to download %s (Status Code: %s)", url, response.status_code)
+                except requests.RequestException as e:
+                    logging.error("Error downloading %s: %s", url, e)
+
+                time.sleep(random.uniform(1, 3))
 
             if len(downloaded_files) >= max_results:
                 break
 
         # Move to the next page of Google search results
         start += results_per_page
-        time.sleep(2)  # Add a delay to avoid being blocked by Google
+        time.sleep(random.uniform(1, 3))
 
     return downloaded_files
 
@@ -93,18 +140,25 @@ def extract_and_download_links(html_content, visited_urls, output_folder):
         if url.startswith('http') and url not in visited_urls:
             visited_urls.add(url)
             try:
-                # SSL verification using certifi's CA bundle
-                response = requests.get(url, verify=certifi.where())
+                response = requests.get(
+                    url,
+                    headers=get_random_headers(),
+                    verify=certifi.where(),
+                    proxies=get_random_proxy(),
+                    timeout=10,
+                )
                 if response.status_code == 200:
                     file_name = f"page_{len(visited_urls)}.html"
                     file_path = os.path.join(output_folder, file_name)
                     with open(file_path, 'w', encoding='utf-8') as f:
                         f.write(response.text)
-                    print(f"Downloaded linked page: {url}")
+                    logging.info("Downloaded linked page: %s", url)
                 else:
-                    print(f"Failed to download {url} (Status Code: {response.status_code})")
-            except Exception as e:
-                print(f"Error downloading {url}: {e}")
+                    logging.warning("Failed to download %s (Status Code: %s)", url, response.status_code)
+            except requests.RequestException as e:
+                logging.error("Error downloading %s: %s", url, e)
+
+            time.sleep(random.uniform(1, 3))
 
 # Function to extract emails from downloaded pages
 def extract_emails_from_pages(files, domain_suffix):
@@ -189,8 +243,20 @@ def main():
     parser.add_argument('-d', '--domain', type=str, required=True, help='Domain suffix to search for (e.g., nitj.ac.in)')
     parser.add_argument('-m', '--max_results', type=int, default=30, help='Number of Google search results to process (default: 30)')
     parser.add_argument('-o', '--output_folder', type=str, default='downloaded_pages', help='Folder to save downloaded pages (default: downloaded_pages)')
+    parser.add_argument('--proxy_file', type=str, help='File containing proxy addresses (one per line)')
 
     args = parser.parse_args()
+
+    if args.proxy_file:
+        try:
+            with open(args.proxy_file, 'r') as pf:
+                for line in pf:
+                    line = line.strip()
+                    if line:
+                        PROXIES.append(line)
+            logging.info("Loaded %d proxies", len(PROXIES))
+        except OSError as e:
+            logging.error("Failed to load proxy file: %s", e)
 
     global CERTIFICATE_FINGERPRINT
     CERTIFICATE_FINGERPRINT = get_certificate_fingerprint(args.domain)
