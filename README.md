@@ -49,44 +49,18 @@ To run the tool, follow these steps:
 ./emailharvester.py -d example.com -m 50 -o my_downloads
 ```
 
-## TODO: Enhancements and Best Practices
+## Enhancements and Best Practices
 
-This section provides suggestions to enhance the tool's capabilities, making it a more powerful email harvester:
 
-1. **Advanced SSL Bypassing**:
-    - Implement SSL certificate pinning techniques or use libraries like `urllib3` to better handle SSL certificate verification bypassing.
+The tool now includes several improvements to enhance scraping reliability:
 
-2. **Handling CAPTCHA Challenges**:
-    - Integrate CAPTCHA solving services (e.g., 2Captcha) to automatically bypass Google's CAPTCHA challenges.
-    - Use headless browsers like Selenium with anti-detection techniques to reduce the chances of triggering CAPTCHA.
+1. **SSL Pinning** – verifies the server certificate against a pinned fingerprint.
+2. **User-Agent Rotation** – requests use a random User-Agent string.
+3. **Proxy Support** – provide a file of proxies to rotate source IPs.
+4. **Rate Limiting** – random delays help mimic human browsing.
+5. **Logging** – all actions are written to `emailharvester.log`.
 
-3. **User-Agent Rotation**:
-    - Implement random User-Agent rotation or use libraries like `fake_useragent` to mimic different browsers and reduce detection risk.
-    - Introduce random delays and request intervals to simulate human browsing behavior.
-
-4. **Proxies and Tor Network**:
-    - Use rotating proxies or the Tor network to anonymize requests and avoid IP blocking.
-    - Consider implementing a proxy pool to distribute requests across multiple IPs.
-
-5. **Advanced Parsing**:
-    - Improve the email extraction process by using advanced regular expressions or natural language processing (NLP) techniques to better identify and extract emails.
-    - Add functionality to extract additional data like phone numbers or social media handles.
-
-6. **Multi-Threading**:
-    - Implement multi-threading or asynchronous processing to speed up page downloading and email extraction, especially when dealing with a large number of results.
-
-7. **Error Handling and Logging**:
-    - Enhance error handling to manage network issues, timeouts, and unexpected server responses more gracefully.
-    - Introduce detailed logging for monitoring the tool's performance and diagnosing issues.
-
-8. **Browser Emulation**:
-    - Integrate browser emulation using tools like Playwright or Puppeteer to render JavaScript-heavy pages and scrape dynamically loaded content.
-
-9. **Rate Limiting**:
-    - Introduce rate-limiting to avoid triggering anti-bot mechanisms and ensure compliance with Google's terms of service.
-
-10. **Extensive Testing**:
-    - Conduct thorough testing across different domains and search environments to ensure the tool's robustness and effectiveness.
+For more demanding scenarios, consider adding CAPTCHA solving, browser automation or multi-threading for better performance.
 
 ## Disclaimer
 
